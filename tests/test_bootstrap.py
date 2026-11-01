@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import patch
+
 import bootstrap
 
 
@@ -36,6 +37,7 @@ class BootstrapTest(unittest.TestCase):
         phases = []
         def phase(command, **kwargs):
             data = YAML().load(Path(command[2]))
+            self.assertEqual(data['all']['hosts']['node']['ansible_python_interpreter'], '/usr/bin/python3')
             phases.append(data['all']['hosts']['node']['tg_bootstrap_phase'])
             return type('Result', (), {'returncode': 0})()
         run.side_effect = phase

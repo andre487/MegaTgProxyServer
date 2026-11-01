@@ -2,6 +2,7 @@ all:
   children:
     tg_proxies:
       vars:
+        ansible_python_interpreter: /usr/bin/python3
         ansible_user: deploy
         # Listed public addresses come first; unlisted links follow in unspecified order.
         tg_links_order: [tg.example.com]

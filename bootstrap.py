@@ -49,6 +49,7 @@ def bootstrap(path, limit, password_file=None):
             variables = dict(host, tg_bootstrap_phase=phase,
                              ansible_user=admin['user'] if phase == 'policy' else admin['bootstrap_user'],
                              ansible_ssh_private_key_file=str(key) if phase == 'policy' else admin.get('bootstrap_private_key_file', str(key)))
+            variables.setdefault('ansible_python_interpreter', '/usr/bin/python3')
             if phase == 'account' and admin.get('bootstrap_auth') == 'password':
                 password = Path(password_file).read_text().strip() if password_file else getpass.getpass(f'Initial SSH password for {name}: ')
                 if not password:
