@@ -2,7 +2,6 @@
 - name: Configure Telegram proxy servers
   hosts: tg_proxies
   become: true
-  serial: 1
   pre_tasks:
     - name: Validate configuration before changing servers
       ansible.builtin.assert:
