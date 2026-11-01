@@ -56,7 +56,7 @@
 
 - name: Remove unused previous and legacy proxy images
   ansible.builtin.include_tasks: image.yml
-  loop: "{{ (([tg_previous_proxy.container.Image] if tg_previous_proxy is defined and tg_previous_proxy.exists else []) + ([tg_cleanup_retired.container.Image] if tg_cleanup_retired is defined and tg_cleanup_retired.exists else []) + tg_local_mtproxy_images.stdout_lines + tg_legacy_build_images.stdout_lines + (tg_legacy_mtproxy_image.images | map(attribute='Id') | list)) | unique }}"
+  loop: "{{ (([tg_previous_proxy.container.Image] if tg_previous_proxy is defined and (tg_previous_proxy.exists | default(false)) else []) + ([tg_cleanup_retired.container.Image] if tg_cleanup_retired is defined and (tg_cleanup_retired.exists | default(false)) else []) + tg_local_mtproxy_images.stdout_lines + tg_legacy_build_images.stdout_lines + (tg_legacy_mtproxy_image.images | map(attribute='Id') | list)) | unique }}"
   loop_control:
     loop_var: tg_retired_image
 

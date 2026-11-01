@@ -190,7 +190,8 @@ One-off migration scripts/playbooks belong outside the production repository.
 ./mega-tg-proxy configs --limit example
 ```
 
-Apply runs serially, one host at a time, to keep alternatives available.
+Apply runs across hosts in parallel using the default Ansible strategy (up to 5 forks by default).
+Set `--forks N` (`-f N`) to control concurrency.
 Container recreation interrupts sessions. verify is a readiness check, not an MTProto
 session: test messages/media in Telegram from the affected network before proceeding.
 A failed verification leaves changes applied. If recovery is needed, restore the prior

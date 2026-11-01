@@ -32,3 +32,23 @@ class CleanupSafetyTest(unittest.TestCase):
                     self.assertNotIn('-f', command)
                 self.assertNotIn('community.docker.docker_volume', task)
         self.assertGreater(prune_count, 0)
+
+    def test_image_candidates_handle_skipped_register_results(self):
+        from jinja2 import StrictUndefined
+        from jinja2.nativetypes import NativeEnvironment
+        tasks = YAML(typ='safe').load(Path(__file__).resolve().parents[1]/'roles/docker_cleanup/tasks/main.yml')
+        expression = next(task['loop'] for task in tasks if task.get('loop_control', {}).get('loop_var') == 'tg_retired_image')
+        env = NativeEnvironment(undefined=StrictUndefined)
+        env.filters['unique'] = lambda values: list(dict.fromkeys(values))
+        context = {'tg_local_mtproxy_images': {'stdout_lines': ['local']},
+                   'tg_legacy_build_images': {'stdout_lines': []},
+                   'tg_legacy_mtproxy_image': {'images': [{'Id': 'legacy'}]}}
+        for result in [None, {'skipped': True, 'changed': False}, {'exists': False}]:
+            with self.subTest(result=result):
+                variables = dict(context)
+                if result is not None:
+                    variables.update(tg_previous_proxy=result, tg_cleanup_retired=result)
+                self.assertEqual(env.from_string(expression).render(**variables), ['local', 'legacy'])
+        context.update(tg_previous_proxy={'exists': True, 'container': {'Image': 'previous'}},
+                       tg_cleanup_retired={'exists': True, 'container': {'Image': 'previous'}})
+        self.assertEqual(env.from_string(expression).render(**context), ['previous', 'local', 'legacy'])
