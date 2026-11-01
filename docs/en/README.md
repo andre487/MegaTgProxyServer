@@ -1,5 +1,3 @@
-<img src="../assets/mpx-icon.png" alt="MPX" width="96" height="96">
-
 # MegaTgProxyServer guide
 
 <p align="center">
