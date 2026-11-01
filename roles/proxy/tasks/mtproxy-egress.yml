@@ -1,0 +1,51 @@
+---
+- name: Check transparent egress installation
+  ansible.builtin.stat:
+    path: /etc/systemd/system/megatg-redsocks.service
+  register: tg_redsocks_unit
+
+- name: Remove transparent egress when no longer selected
+  when: not (tg_engine == 'mtproxy' and tg_egress == 'ssh') and tg_redsocks_unit.stat.exists
+  block:
+    - name: Stop transparent egress
+      ansible.builtin.systemd_service:
+        name: megatg-redsocks
+        enabled: false
+        state: stopped
+    - name: Remove redirect rule
+      ansible.builtin.shell: |
+        while iptables -t nat -D PREROUTING -j MEGATG_EGRESS 2>/dev/null; do :; done
+        iptables -t nat -F MEGATG_EGRESS
+        iptables -t nat -X MEGATG_EGRESS
+      changed_when: true
+
+    - name: Remove obsolete transparent egress unit
+      ansible.builtin.file:
+        path: /etc/systemd/system/megatg-redsocks.service
+        state: absent
+
+- name: Install transparent egress for official MTProxy
+  when: tg_engine == 'mtproxy' and tg_egress == 'ssh'
+  block:
+    - name: Install redsocks and iptables
+      ansible.builtin.apt:
+        name: [redsocks, iptables]
+        state: present
+    - name: Configure transparent SOCKS relay
+      ansible.builtin.template:
+        src: redsocks.conf.j2
+        dest: /etc/megatg/redsocks.conf
+        mode: '0600'
+      register: tg_redsocks_config
+    - name: Install transparent egress service
+      ansible.builtin.template:
+        src: megatg-redsocks.service.j2
+        dest: /etc/systemd/system/megatg-redsocks.service
+        mode: '0644'
+      register: tg_redsocks_service
+    - name: Enable transparent egress
+      ansible.builtin.systemd_service:
+        name: megatg-redsocks
+        daemon_reload: true
+        enabled: true
+        state: "{{ 'restarted' if tg_redsocks_config.changed or tg_redsocks_service.changed else 'started' }}"

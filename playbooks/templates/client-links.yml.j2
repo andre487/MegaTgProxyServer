@@ -1,0 +1,11 @@
+{% if tg_node_role | default('proxy') == 'jump' %}
+{% for tunnel in tg_jump_tunnels %}
+{% set backend = hostvars[tunnel.inventory_host] %}
+{% set secret = ('ee' ~ backend.tg_secret ~ backend.tg_domain.encode('utf-8').hex()) if backend.tg_mode == 'faketls' else backend.tg_secret %}
+{% for endpoint in ([tunnel.endpoint] if tunnel.endpoint is defined else (tg_endpoints | default([tg_endpoint | default(ansible_host)]))) %}
+- {{ {'mode': tunnel.name, 'url': 'tg://proxy?server=' ~ endpoint ~ '&port=' ~ tg_port|string ~ '&secret=' ~ secret} | to_json }}
+{% endfor %}
+{% endfor %}
+{% else %}
+- {{ {'mode': tg_mode, 'url': 'tg://proxy?server=' ~ (tg_endpoint | default(ansible_host)) ~ '&port=' ~ tg_port|string ~ '&secret=' ~ (('ee' ~ tg_secret ~ tg_domain.encode('utf-8').hex()) if tg_mode == 'faketls' else tg_secret)} | to_json }}
+{% endif %}

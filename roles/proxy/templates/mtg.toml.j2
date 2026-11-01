@@ -1,0 +1,7 @@
+secret = {{ tg_secret_full | to_json }}
+bind-to = "0.0.0.0:3128"
+[network]
+proxies = {{ (['socks5://' ~ tg_gateway ~ ':' ~ tg_ssh_socks_port|string] if tg_egress == 'ssh' else []) | to_json }}
+[stats.prometheus]
+enabled = true
+bind-to = "0.0.0.0:3129"

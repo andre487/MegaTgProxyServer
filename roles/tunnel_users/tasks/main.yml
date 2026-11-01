@@ -1,0 +1,16 @@
+---
+- name: Validate tunnel accounts
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-z_][a-z0-9_-]*$')
+      - item.name not in ['root', tg_admin.user, 'nobody']
+      - item.public_keys | length > 0
+      - item.port | int > 0 and item.port | int < 65536
+  loop: "{{ tg_tunnel_users | default([]) }}"
+  no_log: true
+
+- name: Configure tunnel accounts
+  ansible.builtin.include_tasks: account.yml
+  loop: "{{ tg_tunnel_users | default([]) }}"
+  loop_control:
+    loop_var: tunnel_user

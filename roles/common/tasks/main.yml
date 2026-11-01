@@ -27,15 +27,9 @@
   when: not ansible_check_mode
 
 - name: Configure SSH protection
-  ansible.builtin.copy:
+  ansible.builtin.template:
     dest: /etc/fail2ban/jail.d/megatg.conf
-    content: |
-      [sshd]
-      enabled = true
-      backend = systemd
-      port = {{ ansible_port | default(22) }}
-      bantime = 86400
-      maxretry = 5
+    src: fail2ban.conf.j2
     mode: '0644'
   notify: Restart fail2ban
 
@@ -47,12 +41,9 @@
   when: not ansible_check_mode
 
 - name: Configure background security updates without automatic reboot
-  ansible.builtin.copy:
+  ansible.builtin.template:
     dest: /etc/apt/apt.conf.d/52megatg-upgrades
-    content: |
-      APT::Periodic::Update-Package-Lists "1";
-      APT::Periodic::Unattended-Upgrade "{{ '1' if tg_unattended_upgrades else '0' }}";
-      Unattended-Upgrade::Automatic-Reboot "false";
+    src: unattended-upgrades.conf.j2
     mode: '0644'
 
 - name: Create journal configuration directory
@@ -62,13 +53,8 @@
     mode: '0755'
 
 - name: Limit journal size
-  ansible.builtin.copy:
+  ansible.builtin.template:
     dest: /etc/systemd/journald.conf.d/60-megatg-limits.conf
-    content: |
-      [Journal]
-      SystemMaxUse=500M
-      SystemMaxFileSize=100M
-      SystemMaxFiles=100
-      SystemKeepFree=100M
+    src: journald.conf.j2
     mode: '0644'
   notify: Restart journald

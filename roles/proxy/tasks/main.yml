@@ -1,4 +1,10 @@
 ---
+- name: Remember previously deployed image for scoped cleanup
+  community.docker.docker_container_info:
+    name: "{{ tg_container_name }}"
+  register: tg_previous_proxy
+  no_log: true
+
 - name: Compute client secret
   ansible.builtin.set_fact:
     tg_secret_full: "{{ tg_secret }}"
@@ -20,10 +26,13 @@
   ansible.builtin.include_tasks: ssh.yml
   when: tg_egress == 'ssh'
 
-- name: Install MTG config preserving imported options
-  ansible.builtin.copy:
+- name: Configure official MTProxy transparent egress
+  ansible.builtin.include_tasks: mtproxy-egress.yml
+
+- name: Install MTG configuration from template
+  ansible.builtin.template:
+    src: "{{ tg_mtg_template }}"
     dest: /etc/megatg/mtg.toml
-    content: "{{ tg_mtg_config | replace('__MEGATG_SECRET__', tg_secret_full) }}"
     mode: '0600'
   when: tg_engine == 'mtg'
   no_log: true
@@ -44,6 +53,28 @@
   when: tg_engine == 'mtproxy' and not ansible_check_mode
   register: tg_protocol_key
 
+- name: Configure official MTProxy startup
+  when: tg_engine == 'mtproxy'
+  block:
+    - name: Download Telegram backend configuration
+      ansible.builtin.get_url:
+        url: https://core.telegram.org/getProxyConfig
+        dest: /etc/megatg/backend.conf
+        mode: '0600'
+        timeout: 20
+      register: tg_backend_config
+      when: not ansible_check_mode
+    - name: Install explicit MTProxy startup
+      ansible.builtin.template:
+        src: mtproxy-start.sh.j2
+        dest: /etc/megatg/mtproxy-start.sh
+        mode: '0700'
+      register: tg_mtproxy_start
+
+- name: Build pinned official MTProxy
+  ansible.builtin.include_tasks: build-mtproxy.yml
+  when: tg_engine == 'mtproxy'
+
 - name: Run Telegram proxy
   community.docker.docker_container:
     name: "{{ tg_container_name }}"
@@ -51,12 +82,16 @@
     pull: missing
     state: started
     restart_policy: unless-stopped
-    recreate: "{{ (tg_config.changed | default(false)) or (tg_protocol_key.changed | default(false)) }}"
-    command: "{{ ['run', '/config.toml'] if tg_engine == 'mtg' else omit }}"
+    recreate: "{{ (tg_config.changed | default(false)) or (tg_protocol_key.changed | default(false)) or (tg_backend_config.changed | default(false)) or (tg_mtproxy_start.changed | default(false)) }}"
+    command: "{{ ['run', '/config.toml'] if tg_engine == 'mtg' else ['/bin/sh', '/megatg-start.sh'] }}"
+    etc_hosts: "{{ {tg_domain: tg_mtproxy_fronting_ip} if tg_engine == 'mtproxy' and tg_mode == 'faketls' and tg_mtproxy_fronting_ip is defined else {} }}"
     network_mode: "{{ tg_network if tg_egress == 'ssh' else 'bridge' }}"
+    sysctls: "{{ {'net.ipv6.conf.all.disable_ipv6': '1'} if tg_engine == 'mtproxy' and tg_egress == 'ssh' else {} }}"
     published_ports: "{{ ['0.0.0.0:' ~ tg_port|string ~ ':' ~ ('3128' if tg_engine == 'mtg' else '443') ~ '/tcp'] + (['[::]:' ~ tg_port|string ~ ':' ~ ('3128' if tg_engine == 'mtg' else '443') ~ '/tcp'] if tg_publish_ipv6 else []) + (['127.0.0.1:3129:3129/tcp'] if tg_engine == 'mtg' else []) }}"
-    volumes: "{{ ['/etc/megatg/mtg.toml:/config.toml:ro'] if tg_engine == 'mtg' else [tg_mtproxy_volume ~ ':/data', '/etc/megatg/telegram-secret:/etc/telegram/hello-explorers-how-are-you-doing:ro'] }}"
-    env: "{{ {'WORKERS': tg_workers|string, 'SECRET': tg_secret} if tg_engine == 'mtproxy' else {} }}"
+    volumes: "{{ ['/etc/megatg/mtg.toml:/config.toml:ro'] if tg_engine == 'mtg' else [tg_mtproxy_volume ~ ':/data', '/etc/megatg/telegram-secret:/etc/telegram/hello-explorers-how-are-you-doing:ro'] + ['/etc/megatg/mtproxy-start.sh:/megatg-start.sh:ro', '/etc/megatg/backend.conf:/etc/telegram/backend.conf:ro'] }}"
+    env: "{{ ({'WORKERS': tg_workers|string, 'SECRET': tg_secret, 'MODE': tg_mode, 'PUBLIC_IP': tg_public_ip | default(ansible_default_ipv4.address)} | combine({'DOMAIN': tg_domain} if tg_mode == 'faketls' else {})) if tg_engine == 'mtproxy' else {} }}"
+    labels:
+      io.megatg.managed: "true"
     log_driver: json-file
     log_options:
       max-size: 10m

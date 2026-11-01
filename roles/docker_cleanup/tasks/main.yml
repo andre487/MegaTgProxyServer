@@ -1,0 +1,73 @@
+---
+- name: Check active proxy before cleanup
+  community.docker.docker_container_info:
+    name: "{{ tg_container_name }}"
+  register: tg_cleanup_proxy
+  no_log: true
+  when: tg_node_role | default('proxy') != 'jump'
+
+- name: Require running proxy before deleting old resources
+  ansible.builtin.assert:
+    that: tg_cleanup_proxy.exists and tg_cleanup_proxy.container.State.Running
+  when: tg_node_role | default('proxy') != 'jump'
+
+- name: Require working public listener before cleanup
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ tg_port }}"
+    timeout: 30
+
+- name: Retire obsolete local proxy on jump
+  ansible.builtin.include_tasks: jump.yml
+  when: tg_node_role | default('proxy') == 'jump'
+
+- name: Find stopped project containers
+  ansible.builtin.command:
+    argv: [docker, ps, --all, --no-trunc, --quiet, --filter, "label={{ item }}", --filter, status=exited, --filter, status=created, --filter, status=dead]
+  loop: [io.megatg.managed=true, io.megatg.build=true]
+  changed_when: false
+  register: tg_stopped_project_containers
+
+- name: Remove stopped project containers except the configured current container
+  ansible.builtin.command:
+    argv: [docker, rm, "{{ item }}"]
+  loop: "{{ tg_stopped_project_containers.results | map(attribute='stdout_lines') | flatten | unique | reject('equalto', tg_cleanup_proxy.container.Id if tg_node_role | default('proxy') != 'jump' else '') | list }}"
+
+- name: Find local MTProxy images
+  ansible.builtin.command:
+    argv: [docker, images, --no-trunc, --quiet, megatg/mtproxy]
+  changed_when: false
+  register: tg_local_mtproxy_images
+
+- name: Find obsolete MTProxy build stages from before ownership labels
+  ansible.builtin.shell: |
+    for image in $(docker image ls --no-trunc --quiet --filter dangling=true); do
+      if docker history --no-trunc "$image" | grep -Fq 'https://codeload.github.com/TelegramMessenger/MTProxy/tar.gz/'; then
+        printf '%s\n' "$image"
+      fi
+    done
+  changed_when: false
+  register: tg_legacy_build_images
+
+- name: Find legacy official image
+  community.docker.docker_image_info:
+    name: telegrammessenger/proxy:latest
+  register: tg_legacy_mtproxy_image
+
+- name: Remove unused previous and legacy proxy images
+  ansible.builtin.include_tasks: image.yml
+  loop: "{{ (([tg_previous_proxy.container.Image] if tg_previous_proxy is defined and tg_previous_proxy.exists else []) + ([tg_cleanup_retired.container.Image] if tg_cleanup_retired is defined and tg_cleanup_retired.exists else []) + tg_local_mtproxy_images.stdout_lines + tg_legacy_build_images.stdout_lines + (tg_legacy_mtproxy_image.images | map(attribute='Id') | list)) | unique }}"
+  loop_control:
+    loop_var: tg_retired_image
+
+- name: Prune only unused project images and networks
+  community.docker.docker_prune:
+    images: true
+    images_filters:
+      label: "{{ item }}"
+      dangling: false
+    networks: true
+    networks_filters:
+      label: "{{ item }}"
+  loop: [io.megatg.managed=true, io.megatg.build=true]
+# Persistent volumes hold secrets/data and are intentionally never pruned.

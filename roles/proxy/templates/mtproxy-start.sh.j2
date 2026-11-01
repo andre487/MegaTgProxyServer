@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+: "${SECRET:?}" "${PUBLIC_IP:?}" "${MODE:?}"
+internal_ip=$(ip -4 route get 1.1.1.1 | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
+[ -n "$internal_ip" ]
+set -- -p 2398 -H 443 -C 60000 \
+  --aes-pwd /etc/telegram/hello-explorers-how-are-you-doing \
+  -u nobody /etc/telegram/backend.conf --allow-skip-dh \
+  --nat-info "$internal_ip:$PUBLIC_IP" -S "$SECRET"
+if [ "$MODE" = faketls ]; then
+  : "${DOMAIN:?}"
+  # TLS mode shares replay protection in one process; do not pass -M.
+  set -- "$@" -D "$DOMAIN"
+elif [ "$MODE" = classic ]; then
+  set -- "$@" -M "${WORKERS:-2}"
+else
+  exit 1
+fi
+exec /usr/local/bin/mtproto-proxy "$@"

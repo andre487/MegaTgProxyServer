@@ -1,0 +1,45 @@
+---
+- name: Create unprivileged tunnel account
+  ansible.builtin.user:
+    name: "{{ tunnel_user.name }}"
+    create_home: true
+    home: "/home/{{ tunnel_user.name }}"
+    password: x
+    update_password: on_create
+    shell: /usr/sbin/nologin
+    groups: ""
+    append: false
+  no_log: true
+
+# The user module masks password "x" inside returned home paths; use the managed path.
+- name: Create tunnel SSH directory
+  ansible.builtin.file:
+    path: "/home/{{ tunnel_user.name }}/.ssh"
+    state: directory
+    owner: "{{ tunnel_user.name }}"
+    mode: '0700'
+
+- name: Install restricted tunnel keys
+  ansible.builtin.template:
+    src: authorized_keys.j2
+    dest: "/home/{{ tunnel_user.name }}/.ssh/authorized_keys"
+    owner: "{{ tunnel_user.name }}"
+    mode: '0600'
+
+- name: Restrict tunnel SSH account
+  ansible.builtin.template:
+    src: sshd.conf.j2
+    dest: "/etc/ssh/sshd_config.d/10-megatg-tunnel-{{ tunnel_user.name }}.conf"
+    mode: '0644'
+  register: tg_tunnel_policy
+
+- name: Validate tunnel SSH policy
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Reload SSH for tunnel account
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded
+  when: tg_tunnel_policy.changed and not ansible_check_mode

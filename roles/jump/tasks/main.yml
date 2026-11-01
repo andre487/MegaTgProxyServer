@@ -1,0 +1,150 @@
+---
+- name: Validate jump routing
+  ansible.builtin.assert:
+    that:
+      - tg_jump_domain is match('^[a-zA-Z0-9.-]+$')
+      - "'classic' in (tg_jump_tunnels | map(attribute='name') | list)"
+      - tg_jump_tunnels | map(attribute='name') | unique | length == tg_jump_tunnels | length
+      - tg_jump_tunnels | map(attribute='local_port') | unique | length == tg_jump_tunnels | length
+      - tg_jump_tunnels | selectattr('sni', 'defined') | map(attribute='sni') | unique | length == tg_jump_tunnels | selectattr('sni', 'defined') | list | length
+
+- name: Validate tunnel destinations
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-z][a-z0-9_]*$')
+      - item.name == 'classic' or (item.sni | default(tg_jump_domain)) is match('^[a-zA-Z0-9.-]+$')
+      - item.host is match('^[a-zA-Z0-9.-]+$')
+      - item.user is match('^[a-z_][a-z0-9_-]*$')
+      - item.local_port | int > 1023 and item.local_port | int < 65536
+      - item.remote_port | int > 0 and item.remote_port | int < 65536
+      - item.ssh_port | default(22) | int > 0 and item.ssh_port | default(22) | int < 65536
+  loop: "{{ tg_jump_tunnels }}"
+
+- name: Install TCP router
+  ansible.builtin.apt:
+    name: [haproxy, openssh-client]
+    state: present
+
+- name: Create tunnel service user
+  ansible.builtin.user:
+    name: megatg-tunnel
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+
+- name: Create private jump directory
+  ansible.builtin.file:
+    path: /etc/megatg-jump
+    state: directory
+    owner: megatg-tunnel
+    mode: '0700'
+
+- name: Install jump tunnel key
+  ansible.builtin.copy:
+    dest: /etc/megatg-jump/id_ed25519
+    content: "{{ tg_jump_private_key }}"
+    owner: megatg-tunnel
+    mode: '0600'
+    validate: /usr/bin/ssh-keygen -y -f %s
+  register: tg_jump_key
+  no_log: true
+  diff: false
+
+- name: Pin backend host keys
+  ansible.builtin.template:
+    src: known_hosts.j2
+    dest: /etc/megatg-jump/known_hosts
+    owner: megatg-tunnel
+    mode: '0600'
+  register: tg_jump_hosts
+
+- name: Install tunnel units
+  ansible.builtin.template:
+    src: tunnel.service.j2
+    dest: "/etc/systemd/system/megatg-tunnel-{{ item.name }}.service"
+    mode: '0644'
+  loop: "{{ tg_jump_tunnels }}"
+  register: tg_jump_units
+
+- name: Start backend tunnels
+  ansible.builtin.systemd_service:
+    name: "megatg-tunnel-{{ item.item.name }}"
+    daemon_reload: true
+    enabled: true
+    state: "{{ 'restarted' if item.changed or tg_jump_key.changed or tg_jump_hosts.changed else 'started' }}"
+  loop: "{{ tg_jump_units.results }}"
+  when: not ansible_check_mode
+
+- name: Require tunnel listeners before switching traffic
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item.local_port }}"
+    timeout: 30
+  loop: "{{ tg_jump_tunnels }}"
+  when: not ansible_check_mode
+
+- name: Verify FakeTLS backend path before switching traffic
+  ansible.builtin.command:
+    argv: [curl, --fail, --silent, --show-error, --max-time, '20', --connect-to, "{{ tg_jump_domain }}:443:127.0.0.1:{{ (tg_jump_tunnels | selectattr('name', 'equalto', 'faketls') | first).local_port }}", "https://{{ tg_jump_domain }}/"]
+  changed_when: false
+  when: not ansible_check_mode
+  no_log: true
+
+- name: Validate and install routing configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: /etc/haproxy/haproxy.cfg
+    mode: '0644'
+    validate: /usr/sbin/haproxy -c -f %s
+    backup: true
+  register: tg_jump_router
+
+- name: Inspect legacy proxy before cutover
+  community.docker.docker_container_info:
+    name: "{{ tg_container_name }}"
+  register: tg_jump_previous
+  no_log: true
+
+- name: Switch public listener with rollback
+  when: not ansible_check_mode
+  block:
+    - name: Stop previous proxy to release public port
+      community.docker.docker_container:
+        name: "{{ tg_container_name }}"
+        state: stopped
+        restart_policy: 'no'
+      when: tg_jump_previous.exists
+
+    - name: Start TCP routing
+      ansible.builtin.systemd_service:
+        name: haproxy
+        enabled: true
+        state: "{{ 'reloaded' if tg_jump_router.changed else 'started' }}"
+      when: not ansible_check_mode
+  rescue:
+    - name: Restore previous HAProxy configuration
+      ansible.builtin.copy:
+        src: "{{ tg_jump_router.backup_file }}"
+        dest: /etc/haproxy/haproxy.cfg
+        remote_src: true
+        mode: '0644'
+      when: tg_jump_router.backup_file is defined
+    - name: Reload restored router
+      ansible.builtin.systemd_service:
+        name: haproxy
+        state: reloaded
+      when: not tg_jump_previous.exists
+    - name: Stop rejected router for initial cutover
+      ansible.builtin.systemd_service:
+        name: haproxy
+        state: stopped
+      when: tg_jump_previous.exists
+    - name: Restore previous proxy for initial cutover
+      community.docker.docker_container:
+        name: "{{ tg_container_name }}"
+        state: started
+        restart_policy: unless-stopped
+      when: tg_jump_previous.exists
+    - name: Report unsuccessful cutover
+      ansible.builtin.fail:
+        msg: Router update failed; previous configuration restored

@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
 # px-manager support for this TG inventory must be installed before enabling.
+# MEGATG_LINKS_FILE contains ready links; MEGATG_LIMIT contains the selected scope.
 export MEGAPROXY_INVENTORY="$MEGATG_INVENTORY"
 exec "${PX_MANAGER_REPO:-$HOME/MyProjects/px-manager}/tools/deploy.sh"

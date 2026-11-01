@@ -24,13 +24,9 @@
 - name: Install and validate administrative SSH policy
   block:
     - name: Install global SSH authentication policy
-      ansible.builtin.copy:
+      ansible.builtin.template:
         dest: /etc/ssh/sshd_config.d/00-megatg-admin.conf
-        content: |
-          PermitRootLogin no
-          PubkeyAuthentication yes
-          PasswordAuthentication no
-          KbdInteractiveAuthentication no
+        src: sshd-admin.conf.j2
         owner: root
         group: root
         mode: "0644"

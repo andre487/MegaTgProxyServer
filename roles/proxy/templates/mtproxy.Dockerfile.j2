@@ -1,0 +1,19 @@
+FROM debian:bookworm-slim AS build
+LABEL io.megatg.build=true
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential libssl-dev zlib1g-dev ca-certificates curl busybox-static && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN curl -fsSL https://codeload.github.com/TelegramMessenger/MTProxy/tar.gz/{{ tg_mtproxy_source_ref }} | tar -xz --strip-components=1
+RUN make -j2 COMMIT={{ tg_mtproxy_source_ref }}
+RUN mkdir -p /runtime/usr/local/bin /runtime/bin /runtime/etc \
+ && cp objs/bin/mtproto-proxy /runtime/usr/local/bin/ \
+ && ldd objs/bin/mtproto-proxy | awk '$3 ~ /^\// {print $3} $1 ~ /^\// {print $1}' | xargs -r -I '{}' cp --parents '{}' /runtime
+RUN cp /bin/busybox /runtime/bin/ \
+ && for applet in sh ip awk; do ln -s busybox /runtime/bin/$applet; done \
+ && printf 'root:x:0:0:root:/:/bin/sh\nnobody:x:65534:65534:nobody:/:/bin/false\n' > /runtime/etc/passwd \
+ && printf 'root:x:0:\nnogroup:x:65534:\n' > /runtime/etc/group \
+ && printf 'passwd: files\ngroup: files\nhosts: files dns\n' > /runtime/etc/nsswitch.conf
+
+FROM scratch
+LABEL io.megatg.managed=true org.opencontainers.image.revision={{ tg_mtproxy_source_ref }}
+COPY --from=build /runtime/ /
+CMD ["/bin/sh", "/megatg-start.sh"]

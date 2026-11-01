@@ -1,0 +1,19 @@
+---
+- name: Inspect candidate image
+  community.docker.docker_image_info:
+    name: "{{ tg_retired_image }}"
+  register: tg_unused_image
+
+- name: Check whether any container still references this image
+  ansible.builtin.command:
+    argv: [docker, ps, --all, --quiet, --filter, "ancestor={{ tg_retired_image }}"]
+  changed_when: false
+  register: tg_image_users
+  when: tg_unused_image.images | length > 0
+
+- name: Remove unused image tags and image without force
+  community.docker.docker_image:
+    name: "{{ item }}"
+    state: absent
+    force_absent: false
+  loop: "{{ ((tg_unused_image.images[0].RepoTags | default([], true)) + [tg_retired_image]) if tg_unused_image.images | length > 0 and tg_image_users.stdout | length == 0 else [] }}"
