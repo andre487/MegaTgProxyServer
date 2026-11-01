@@ -1,6 +1,8 @@
-<img src="docs/assets/mpx-icon.png" alt="MPX" width="96" height="96">
-
 # MegaTgProxyServer
+
+<p align="center">
+  <img src="docs/assets/icon-radius.svg" width="160" alt="MPX — MegaTgProxyServer">
+</p>
 
 Manage Telegram proxies on Debian and Ubuntu with Ansible: MTG FakeTLS or official
 MTProxy (classic/FakeTLS), direct or SSH/SOCKS5 egress, and an SSH/SNI ingress jump. [MIT licensed](LICENSE).
