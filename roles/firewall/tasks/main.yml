@@ -1,0 +1,36 @@
+---
+- name: Allow SSH before enabling firewall
+  community.general.ufw:
+    rule: allow
+    port: "{{ ansible_port | default(22) }}"
+    proto: tcp
+
+- name: Allow Telegram proxy
+  community.general.ufw:
+    rule: allow
+    port: "{{ tg_port }}"
+    proto: tcp
+
+- name: Allow only MTG containers to reach the SSH SOCKS listener
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: "{{ tg_bridge }}"
+    from_ip: "{{ tg_subnet }}"
+    to_ip: "{{ tg_gateway }}"
+    port: "{{ tg_ssh_socks_port }}"
+    proto: tcp
+  when: tg_egress == 'ssh'
+
+- name: Deny other incoming connections
+  community.general.ufw:
+    direction: incoming
+    policy: deny
+    state: enabled
+
+# Docker published ports bypass UFW INPUT. Limit each container to the two
+# declared mappings in the proxy role; no management port is published publicly.
+- name: Allow outbound connections
+  community.general.ufw:
+    direction: outgoing
+    policy: allow

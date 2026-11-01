@@ -1,0 +1,53 @@
+---
+- name: Validate administrative access
+  ansible.builtin.assert:
+    that:
+      - tg_admin.user != "root"
+      - tg_admin.public_key | length > 0
+    fail_msg: "A non-root administrator and its public key are required"
+
+- name: Create or update administrative user
+  ansible.builtin.user:
+    name: "{{ tg_admin.user }}"
+    state: present
+    create_home: true
+    password: '!'
+    update_password: on_create
+    groups: sudo
+    append: true
+  register: tg_admin_account
+
+- name: Create administrative SSH directory
+  ansible.builtin.file:
+    path: "{{ tg_admin_account.home }}/.ssh"
+    state: directory
+    owner: "{{ tg_admin.user }}"
+    mode: "0700"
+
+- name: Install administrative public key
+  ansible.builtin.lineinfile:
+    path: "{{ tg_admin_account.home }}/.ssh/authorized_keys"
+    line: "{{ tg_admin.public_key }}"
+    create: true
+    owner: "{{ tg_admin.user }}"
+    mode: "0600"
+  when: tg_bootstrap_phase | default('') == 'account'
+  no_log: true
+
+- name: Replace verified administrative public key
+  ansible.builtin.copy:
+    dest: "{{ tg_admin_account.home }}/.ssh/authorized_keys"
+    content: "{{ tg_admin.public_key }}\n"
+    owner: "{{ tg_admin.user }}"
+    mode: "0600"
+  when: tg_bootstrap_phase | default('') != 'account'
+  no_log: true
+
+- name: Allow non-interactive administration through sudo
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/megatg-{{ tg_admin.user }}"
+    content: "{{ tg_admin.user }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s

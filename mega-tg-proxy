@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+import os
+import shutil
+import sys
+from pathlib import Path
+root = Path(__file__).resolve().parent
+os.chdir(root)
+uv = shutil.which("uv")
+if not uv:
+    sys.exit("Install uv: https://docs.astral.sh/uv/")
+os.execv(uv, [uv, "run", "--frozen", "python", str(root / "cli.py"), *sys.argv[1:]])

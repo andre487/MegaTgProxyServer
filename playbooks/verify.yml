@@ -1,0 +1,36 @@
+---
+- name: Verify Telegram proxy runtime
+  hosts: tg_proxies
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Read container state
+      community.docker.docker_container_info:
+        name: "{{ tg_container_name }}"
+      register: tg_runtime
+      no_log: true
+    - name: Require running proxy
+      ansible.builtin.assert:
+        that: tg_runtime.exists and tg_runtime.container.State.Running
+    - name: Check public TCP listener from controller
+      ansible.builtin.wait_for:
+        host: "{{ ansible_host }}"
+        port: "{{ tg_port }}"
+        timeout: 10
+      delegate_to: localhost
+      become: false
+    - name: Probe SSH SOCKS egress
+      ansible.builtin.command:
+        argv: [curl, --fail, --silent, --show-error, --connect-timeout, '5', --max-time, '15', --proxy, "socks5h://{{ tg_gateway }}:{{ tg_ssh_socks_port }}", 'https://api.ipify.org']
+      changed_when: false
+      when: tg_egress == 'ssh'
+    - name: Check MTG metrics listener
+      ansible.builtin.uri:
+        url: http://127.0.0.1:3129/metrics
+        return_content: true
+      register: tg_metrics
+      when: tg_engine == 'mtg'
+    - name: Require MTG metrics
+      ansible.builtin.assert:
+        that: "'mtg_client_connections' in tg_metrics.content"
+      when: tg_engine == 'mtg'

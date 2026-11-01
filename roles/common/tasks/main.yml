@@ -1,0 +1,74 @@
+---
+- name: Install only runtime and security dependencies
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, openssl, sudo, openssh-server, openssh-client, python3, python3-docker, fail2ban, ufw, systemd-timesyncd, unattended-upgrades, logrotate]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 600
+
+- name: Detect existing Docker installation
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: tg_docker_binary
+
+- name: Install distribution Docker on fresh hosts
+  ansible.builtin.apt:
+    name: docker.io
+    state: present
+  when: not tg_docker_binary.stat.exists
+
+- name: Enable Docker and time synchronization
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [docker, systemd-timesyncd]
+  when: not ansible_check_mode
+
+- name: Configure SSH protection
+  ansible.builtin.copy:
+    dest: /etc/fail2ban/jail.d/megatg.conf
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      port = {{ ansible_port | default(22) }}
+      bantime = 86400
+      maxretry = 5
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Enable fail2ban
+  ansible.builtin.systemd_service:
+    name: fail2ban
+    enabled: true
+    state: started
+  when: not ansible_check_mode
+
+- name: Configure background security updates without automatic reboot
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/52megatg-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "{{ '1' if tg_unattended_upgrades else '0' }}";
+      Unattended-Upgrade::Automatic-Reboot "false";
+    mode: '0644'
+
+- name: Create journal configuration directory
+  ansible.builtin.file:
+    path: /etc/systemd/journald.conf.d
+    state: directory
+    mode: '0755'
+
+- name: Limit journal size
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/60-megatg-limits.conf
+    content: |
+      [Journal]
+      SystemMaxUse=500M
+      SystemMaxFileSize=100M
+      SystemMaxFiles=100
+      SystemKeepFree=100M
+    mode: '0644'
+  notify: Restart journald

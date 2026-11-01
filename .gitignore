@@ -1,0 +1,7 @@
+.venv/
+.generated/
+.secrets/
+.hooks/
+inventory-path
+inventory.yml
+__pycache__/

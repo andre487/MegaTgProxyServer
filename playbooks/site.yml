@@ -1,0 +1,27 @@
+---
+- name: Configure Telegram proxy servers
+  hosts: tg_proxies
+  become: true
+  pre_tasks:
+    - name: Validate configuration before changing servers
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution in ['Debian', 'Ubuntu']
+          - tg_engine in ['mtg', 'mtproxy']
+          - tg_secret is match('^[0-9a-fA-F]{32}$')
+          - tg_mode in ['classic', 'faketls']
+          - tg_engine != 'mtg' or tg_mode == 'faketls'
+          - tg_engine != 'mtproxy' or tg_mode == 'classic'
+          - tg_egress in ['direct', 'ssh']
+          - tg_egress != 'ssh' or tg_engine == 'mtg'
+          - (tg_port | int) > 0 and (tg_port | int) < 65536
+      no_log: true
+    - name: Require verified administrator connection
+      ansible.builtin.assert:
+        that: ansible_user == tg_admin.user and tg_admin.user != 'root'
+        fail_msg: Connect using the configured non-root administrator before applying SSH hardening.
+  roles:
+    - common
+    - admin
+    - firewall
+    - proxy

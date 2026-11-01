@@ -1,0 +1,57 @@
+---
+- name: Validate SSH egress
+  ansible.builtin.assert:
+    that:
+      - tg_ssh_host | length > 0
+      - tg_ssh_user | length > 0
+      - tg_ssh_private_key | length > 0
+      - tg_ssh_known_hosts | length > 0
+  no_log: true
+
+- name: Create dedicated Docker network
+  community.docker.docker_network:
+    name: "{{ tg_network }}"
+    driver: bridge
+    ipam_config:
+      - subnet: "{{ tg_subnet }}"
+        gateway: "{{ tg_gateway }}"
+    driver_options:
+      com.docker.network.bridge.name: "{{ tg_bridge }}"
+
+- name: Create SSH directory
+  ansible.builtin.file:
+    path: /etc/megatg/ssh
+    state: directory
+    mode: '0700'
+
+- name: Install tunnel private key
+  ansible.builtin.copy:
+    content: "{{ tg_ssh_private_key }}"
+    dest: /etc/megatg/ssh/id_ed25519
+    mode: '0600'
+    validate: /usr/bin/ssh-keygen -y -f %s
+  no_log: true
+  diff: false
+  register: tg_tunnel_key
+
+- name: Pin SSH exit host identity
+  ansible.builtin.copy:
+    content: "{{ tg_ssh_known_hosts }}
+"
+    dest: /etc/megatg/ssh/known_hosts
+    mode: '0600'
+  register: tg_tunnel_hostkey
+
+- name: Install SSH SOCKS unit
+  ansible.builtin.template:
+    src: mtg-ssh-egress.service.j2
+    dest: /etc/systemd/system/mtg-ssh-egress.service
+    mode: '0644'
+  register: tg_tunnel_unit
+
+- name: Enable SSH tunnel
+  ansible.builtin.systemd_service:
+    name: mtg-ssh-egress
+    daemon_reload: true
+    enabled: true
+    state: "{{ 'restarted' if tg_tunnel_key.changed or tg_tunnel_hostkey.changed or tg_tunnel_unit.changed else 'started' }}"

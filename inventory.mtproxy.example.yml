@@ -1,0 +1,20 @@
+all:
+  children:
+    tg_proxies:
+      vars:
+        ansible_user: deploy
+        tg_port: 443
+        tg_unattended_upgrades: true
+      hosts:
+        example:
+          ansible_host: 203.0.113.10
+          tg_endpoint: tg.example.com
+          tg_engine: mtproxy
+          tg_mode: classic
+          tg_domain: www.example.com
+          tg_egress: direct
+          tg_container_name: mtproto-proxy
+          tg_secret: REPLACE_WITH_VAULT_ENCRYPTED_32_HEX_KEY
+          tg_admin:
+            user: deploy
+            public_key: ssh-ed25519 REPLACE_WITH_ADMIN_PUBLIC_KEY

@@ -1,0 +1,10 @@
+---
+- hosts: localhost
+  gather_facts: false
+  vars:
+    tg_secret: 0123456789abcdef0123456789abcdef
+    tg_domain: example.com
+  tasks:
+    - name: Check FakeTLS wire secret encoding
+      ansible.builtin.assert:
+        that: "('ee' ~ tg_secret ~ tg_domain.encode('utf-8').hex()) == 'ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d'"

@@ -1,0 +1,6 @@
+---
+- name: Configure administrative account
+  ansible.builtin.import_tasks: account.yml
+
+- name: Configure administrative policy
+  ansible.builtin.import_tasks: policy.yml

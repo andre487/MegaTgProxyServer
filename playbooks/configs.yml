@@ -1,0 +1,8 @@
+---
+- name: Print client links on explicit request
+  hosts: tg_proxies
+  gather_facts: false
+  tasks:
+    - name: Client link (contains secret; do not share output)
+      ansible.builtin.debug:
+        msg: "tg://proxy?server={{ tg_endpoint | default(ansible_host) }}&port={{ tg_port }}&secret={{ ('ee' ~ tg_secret ~ tg_domain.encode('utf-8').hex()) if tg_mode == 'faketls' else tg_secret }}"
