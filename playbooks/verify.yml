@@ -8,10 +8,12 @@
       community.docker.docker_container_info:
         name: "{{ tg_container_name }}"
       register: tg_runtime
+      when: tg_node_role | default('proxy') == 'proxy'
       no_log: true
     - name: Require running proxy
       ansible.builtin.assert:
         that: tg_runtime.exists and tg_runtime.container.State.Running
+      when: tg_node_role | default('proxy') == 'proxy'
     - name: Check public TCP listener from controller
       ansible.builtin.wait_for:
         host: "{{ ansible_host }}"
@@ -23,14 +25,30 @@
       ansible.builtin.command:
         argv: [curl, --fail, --silent, --show-error, --connect-timeout, '5', --max-time, '15', --proxy, "socks5h://{{ tg_gateway }}:{{ tg_ssh_socks_port }}", 'https://api.ipify.org']
       changed_when: false
-      when: tg_egress == 'ssh'
+      when: tg_egress == 'ssh' and tg_node_role | default('proxy') == 'proxy'
     - name: Check MTG metrics listener
       ansible.builtin.uri:
         url: http://127.0.0.1:3129/metrics
         return_content: true
       register: tg_metrics
-      when: tg_engine == 'mtg'
+      when: tg_engine == 'mtg' and tg_node_role | default('proxy') == 'proxy'
     - name: Require MTG metrics
       ansible.builtin.assert:
         that: "'mtg_client_connections' in tg_metrics.content"
-      when: tg_engine == 'mtg'
+      when: tg_engine == 'mtg' and tg_node_role | default('proxy') == 'proxy'
+    - name: Read jump service state
+      ansible.builtin.service_facts:
+      when: tg_node_role | default('proxy') == 'jump'
+    - name: Require jump router and tunnels
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services[item].state == 'running'
+          - ansible_facts.services[item].status == 'enabled'
+      loop: "{{ ['haproxy.service'] + (tg_jump_tunnels | map(attribute='name') | map('regex_replace', '^(.*)$', 'megatg-tunnel-\\1.service') | list) }}"
+      when: tg_node_role | default('proxy') == 'jump'
+    - name: Verify public SNI route through jump
+      ansible.builtin.command:
+        argv: [curl, --fail, --silent, --show-error, --max-time, '20', --connect-to, "{{ tg_jump_domain }}:443:127.0.0.1:{{ tg_port }}", "https://{{ tg_jump_domain }}/"]
+      changed_when: false
+      no_log: true
+      when: tg_node_role | default('proxy') == 'jump'

@@ -4,15 +4,8 @@ tg_domain: www.example.com
 tg_port: 443
 tg_egress: direct
 tg_container_name: "{{ 'mtg-proxy' if tg_engine == 'mtg' else 'mtproto-proxy' }}"
-tg_image: "{{ 'nineseconds/mtg:2.2.8' if tg_engine == 'mtg' else 'telegrammessenger/proxy:latest' }}"
-tg_mtg_config: |
-  secret = "__MEGATG_SECRET__"
-  bind-to = "0.0.0.0:3128"
-  [network]
-  proxies = {{ ('["socks5://' ~ tg_gateway ~ ':' ~ tg_ssh_socks_port|string ~ '"]') if tg_egress == 'ssh' else '[]' }}
-  [stats.prometheus]
-  enabled = true
-  bind-to = "0.0.0.0:3129"
+tg_image: "{{ 'nineseconds/mtg:2.2.8' if tg_engine == 'mtg' else 'megatg/mtproxy:' ~ tg_mtproxy_source_ref[:12] ~ '-minimal' }}"
+tg_mtg_template: mtg.toml.j2
 tg_network: mtg_net
 tg_bridge: br-mtg
 tg_subnet: 172.30.44.0/24
@@ -22,3 +15,5 @@ tg_ssh_socks_port: 1080
 tg_workers: 2
 tg_mtproxy_volume: megatg-mtproxy-data
 tg_publish_ipv6: false
+tg_redsocks_port: 12345
+tg_mtproxy_source_ref: 69f2f083b57bbd94932cb9f4f32155f33e719ff1

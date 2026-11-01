@@ -11,7 +11,7 @@
     port: "{{ tg_port }}"
     proto: tcp
 
-- name: Allow only MTG containers to reach the SSH SOCKS listener
+- name: Allow only proxy containers to reach the SSH SOCKS listener
   community.general.ufw:
     rule: allow
     direction: in
@@ -34,3 +34,14 @@
   community.general.ufw:
     direction: outgoing
     policy: allow
+
+- name: Allow MTProxy containers to reach transparent relay
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: "{{ tg_bridge }}"
+    from_ip: "{{ tg_subnet }}"
+    to_ip: "{{ tg_gateway }}"
+    port: "{{ tg_redsocks_port | default(12345) }}"
+    proto: tcp
+  when: tg_engine == 'mtproxy' and tg_egress == 'ssh'

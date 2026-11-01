@@ -1,0 +1,30 @@
+---
+- name: Require pinned official source and a separate local image name
+  ansible.builtin.assert:
+    that:
+      - tg_mtproxy_source_ref is match('^[0-9a-f]{40}$')
+      - not tg_image.startswith('telegrammessenger/proxy')
+      - "'@' not in tg_image"
+
+- name: Create private build context
+  ansible.builtin.file:
+    path: /etc/megatg/mtproxy-build
+    state: directory
+    mode: '0700'
+
+- name: Install official MTProxy build definition
+  ansible.builtin.template:
+    src: mtproxy.Dockerfile.j2
+    dest: /etc/megatg/mtproxy-build/Dockerfile
+    mode: '0644'
+  register: tg_mtproxy_dockerfile
+
+- name: Build image from pinned official MTProxy source
+  community.docker.docker_image:
+    name: "{{ tg_image }}"
+    source: build
+    force_source: "{{ tg_mtproxy_dockerfile.changed }}"
+    build:
+      path: /etc/megatg/mtproxy-build
+      pull: true
+      rm: true

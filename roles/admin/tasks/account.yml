@@ -35,18 +35,18 @@
   no_log: true
 
 - name: Replace verified administrative public key
-  ansible.builtin.copy:
+  ansible.builtin.template:
     dest: "{{ tg_admin_account.home }}/.ssh/authorized_keys"
-    content: "{{ tg_admin.public_key }}\n"
+    src: authorized_keys.j2
     owner: "{{ tg_admin.user }}"
     mode: "0600"
   when: tg_bootstrap_phase | default('') != 'account'
   no_log: true
 
 - name: Allow non-interactive administration through sudo
-  ansible.builtin.copy:
+  ansible.builtin.template:
     dest: "/etc/sudoers.d/megatg-{{ tg_admin.user }}"
-    content: "{{ tg_admin.user }} ALL=(ALL:ALL) NOPASSWD: ALL\n"
+    src: sudoers.j2
     owner: root
     group: root
     mode: "0440"

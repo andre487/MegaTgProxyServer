@@ -8,10 +8,16 @@
       - tg_ssh_known_hosts | length > 0
   no_log: true
 
+- name: Inspect existing Docker network ownership
+  community.docker.docker_network_info:
+    name: "{{ tg_network }}"
+  register: tg_existing_network
+
 - name: Create dedicated Docker network
   community.docker.docker_network:
     name: "{{ tg_network }}"
     driver: bridge
+    labels: "{{ (tg_existing_network.network.Labels | default({}, true)) if tg_existing_network.exists else {'io.megatg.managed': 'true'} }}"
     ipam_config:
       - subnet: "{{ tg_subnet }}"
         gateway: "{{ tg_gateway }}"
@@ -35,9 +41,8 @@
   register: tg_tunnel_key
 
 - name: Pin SSH exit host identity
-  ansible.builtin.copy:
-    content: "{{ tg_ssh_known_hosts }}
-"
+  ansible.builtin.template:
+    src: known_hosts.j2
     dest: /etc/megatg/ssh/known_hosts
     mode: '0600'
   register: tg_tunnel_hostkey

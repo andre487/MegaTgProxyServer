@@ -3,6 +3,38 @@
   hosts: tg_proxies
   gather_facts: false
   tasks:
-    - name: Client link (contains secret; do not share output)
+    - name: Validate jump client link sources
+      ansible.builtin.assert:
+        that:
+          - item.inventory_host is defined
+          - item.inventory_host in hostvars
+          - item.name == 'classic' or (hostvars[item.inventory_host].tg_mode == 'faketls' and hostvars[item.inventory_host].tg_domain == (item.sni | default(tg_jump_domain)))
+          - item.name != 'classic' or hostvars[item.inventory_host].tg_mode == 'classic'
+        fail_msg: Each jump tunnel requires inventory_host referencing its configured backend
+      loop: "{{ tg_jump_tunnels }}"
+      when: tg_node_role | default('proxy') == 'jump'
+      no_log: true
+
+    - name: Compute client links from template
+      ansible.builtin.set_fact:
+        tg_client_links: "{{ lookup('template', 'templates/client-links.yml.j2') | from_yaml | map(attribute='url') | list }}"
+      no_log: true
+
+    - name: Client links (contain secrets; do not share output)
       ansible.builtin.debug:
-        msg: "tg://proxy?server={{ tg_endpoint | default(ansible_host) }}&port={{ tg_port }}&secret={{ ('ee' ~ tg_secret ~ tg_domain.encode('utf-8').hex()) if tg_mode == 'faketls' else tg_secret }}"
+        msg: "{{ tg_client_links }}"
+      when: tg_links_directory is not defined
+
+    - name: Export client links privately on controller
+      ansible.builtin.template:
+        src: templates/links.txt.j2
+        dest: "{{ tg_links_directory }}/{{ inventory_hostname | hash('sha256') }}.txt"
+        mode: '0600'
+      vars:
+        ansible_remote_tmp: "{{ tg_links_directory }}/.ansible-tmp"
+        ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      delegate_to: localhost
+      become: false
+      no_log: true
+      diff: false
+      when: tg_links_directory is defined

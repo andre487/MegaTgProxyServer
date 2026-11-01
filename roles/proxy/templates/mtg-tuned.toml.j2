@@ -1,0 +1,52 @@
+debug = {{ tg_mtg_debug | default(false) | to_json }}
+secret = {{ tg_secret_full | to_json }}
+bind-to = "0.0.0.0:3128"
+concurrency = 8192
+prefer-ip = {{ tg_mtg_prefer_ip | default('prefer-ipv6') | to_json }}
+auto-update = {{ tg_mtg_auto_update | default(false) | to_json }}
+tolerate-time-skewness = "5s"
+allow-fallback-on-unknown-dc = false
+[domain-fronting]
+[network]
+dns = "https://1.1.1.1"
+proxies = {{ (['socks5://' ~ tg_gateway ~ ':' ~ tg_ssh_socks_port|string] if tg_egress == 'ssh' else []) | to_json }}
+[network.timeout]
+tcp = "5s"
+http = {{ tg_mtg_http_timeout | default("10s") | to_json }}
+idle = {{ tg_mtg_idle_timeout | default("5m") | to_json }}
+[defense.doppelganger]
+urls = [
+    "https://yastatic.net/react/19.2.1/react-with-dom.min.js",
+    "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js",
+    "https://st-ok.cdn-vk.ru/res/react/vendor/clsx-2.1.1-amd.js"
+]
+repeats-per-raid = 10
+raid-each = "6h"
+drs = false
+[defense.anti-replay]
+enabled = true
+max-size = "1mib"
+error-rate = 0.001
+[defense.blocklist]
+enabled = true
+download-concurrency = 2
+urls = [
+    "https://iplists.firehol.org/files/firehol_level1.netset",
+]
+update-each = "24h"
+[defense.allowlist]
+enabled = false
+download-concurrency = 2
+urls = [
+]
+update-each = "24h"
+[stats.statsd]
+enabled = false
+address = "0.0.0.0:8888"
+metric-prefix = "mtg"
+tag-format = "datadog"
+[stats.prometheus]
+enabled = true
+bind-to = "0.0.0.0:3129"
+http-path = "/metrics"
+metric-prefix = "mtg"

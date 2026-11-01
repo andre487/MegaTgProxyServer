@@ -8,3 +8,111 @@
     - name: Check FakeTLS wire secret encoding
       ansible.builtin.assert:
         that: "('ee' ~ tg_secret ~ tg_domain.encode('utf-8').hex()) == 'ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d'"
+
+    - name: Check official MTProxy SSH redirect and failure behavior
+      vars:
+        tg_bridge: br-test
+        tg_subnet: 172.30.44.0/24
+        tg_gateway: 172.30.44.1
+        tg_redsocks_port: 12345
+        tg_ssh_socks_port: 1080
+        relay_unit: "{{ lookup('template', '../roles/proxy/templates/megatg-redsocks.service.j2') }}"
+        relay_config: "{{ lookup('template', '../roles/proxy/templates/redsocks.conf.j2') }}"
+      ansible.builtin.assert:
+        that:
+          - "'-i br-test -s 172.30.44.0/24' in relay_unit"
+          - "'--to-destination 172.30.44.1:12345' in relay_unit"
+          - "'ExecStop' not in relay_unit"
+          - "'type = socks5;' in relay_config"
+          - "'port = 1080;' in relay_config"
+
+    - name: Check jump routing and restricted tunnel account
+      vars:
+        tg_port: 443
+        tg_jump_domain: google.com
+        tg_jump_tunnels:
+          - {name: faketls, local_port: 14443}
+          - {name: classic, local_port: 24443}
+        tunnel_user: {name: tun-trpx, port: 443, public_keys: ['ssh-ed25519 TEST']}
+        router: "{{ lookup('template', '../roles/jump/templates/haproxy.cfg.j2') }}"
+        policy: "{{ lookup('template', '../roles/tunnel_users/templates/sshd.conf.j2') }}"
+        keys: "{{ lookup('template', '../roles/tunnel_users/templates/authorized_keys.j2') }}"
+      ansible.builtin.assert:
+        that:
+          - "'req.ssl_sni -i google.com' in router"
+          - "'default_backend classic' in router"
+          - "'content reject if tls_hello !known_sni' in router"
+          - "'127.0.0.1:14443' in router and '127.0.0.1:24443' in router"
+          - "'AllowTcpForwarding local' in policy and 'MaxSessions 0' in policy"
+          - "'permitopen=\"127.0.0.1:443\"' in keys"
+
+    - name: Add jump link test backends
+      ansible.builtin.add_host:
+        name: "{{ item.name }}"
+        tg_mode: "{{ item.mode }}"
+        tg_secret: "{{ item.secret }}"
+        tg_domain: google.com
+      loop:
+        - {name: link_fake, mode: faketls, secret: '11111111111111111111111111111111'}
+        - {name: link_classic, mode: classic, secret: '22222222222222222222222222222222'}
+
+    - name: Check ready jump links use backend secrets and public endpoints
+      vars:
+        tg_node_role: jump
+        tg_port: 443
+        tg_endpoints: [jump1.example.com, jump2.example.com]
+        tg_jump_tunnels:
+          - {name: faketls, inventory_host: link_fake}
+          - {name: classic, inventory_host: link_classic}
+        links: "{{ lookup('template', '../playbooks/templates/client-links.yml.j2') | from_yaml }}"
+      ansible.builtin.assert:
+        that:
+          - links | length == 4
+          - "links[0].url == 'tg://proxy?server=jump1.example.com&port=443&secret=ee11111111111111111111111111111111676f6f676c652e636f6d'"
+          - "links[1].url == 'tg://proxy?server=jump2.example.com&port=443&secret=ee11111111111111111111111111111111676f6f676c652e636f6d'"
+          - "links[2].url == 'tg://proxy?server=jump1.example.com&port=443&secret=22222222222222222222222222222222'"
+          - "links[3].url == 'tg://proxy?server=jump2.example.com&port=443&secret=22222222222222222222222222222222'"
+
+    - name: Check one public domain per jump route preserves backend parameters
+      vars:
+        tg_node_role: jump
+        tg_port: 443
+        tg_endpoint: unused.example.com
+        tg_jump_tunnels:
+          - {name: faketls, inventory_host: link_fake, endpoint: trpx1.example.com}
+          - {name: classic, inventory_host: link_classic, endpoint: trpx2.example.com}
+        links: "{{ lookup('template', '../playbooks/templates/client-links.yml.j2') | from_yaml }}"
+      ansible.builtin.assert:
+        that:
+          - links | length == 2
+          - "links[0].url == 'tg://proxy?server=trpx1.example.com&port=443&secret=ee11111111111111111111111111111111676f6f676c652e636f6d'"
+          - "links[1].url == 'tg://proxy?server=trpx2.example.com&port=443&secret=22222222222222222222222222222222'"
+
+    - name: Check multiple FakeTLS SNI routes preserve classic fallback
+      vars:
+        tg_port: 443
+        tg_jump_domain: google.com
+        tg_jump_tunnels:
+          - {name: faketls, sni: google.com, local_port: 14443}
+          - {name: classic, local_port: 24443}
+          - {name: mtp_kz, sni: mtp-kz.example.com, local_port: 34443}
+        router: "{{ lookup('template', '../roles/jump/templates/haproxy.cfg.j2') }}"
+      ansible.builtin.assert:
+        that:
+          - "'acl known_sni req.ssl_sni -i google.com mtp-kz.example.com' in router"
+          - "'use_backend faketls if { req.ssl_sni -i google.com }' in router"
+          - "'use_backend mtp_kz if { req.ssl_sni -i mtp-kz.example.com }' in router"
+          - "'default_backend classic' in router"
+          - "'127.0.0.1:34443' in router"
+
+    - name: Check standalone client link template
+      vars:
+        tg_node_role: proxy
+        tg_mode: faketls
+        tg_port: 443
+        tg_endpoint: proxy.example.com
+        links: "{{ lookup('template', '../playbooks/templates/client-links.yml.j2') | from_yaml }}"
+      ansible.builtin.assert:
+        that:
+          - links | length == 1
+          - "links[0].url == 'tg://proxy?server=proxy.example.com&port=443&secret=ee0123456789abcdef0123456789abcdef6578616d706c652e636f6d'"

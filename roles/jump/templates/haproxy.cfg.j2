@@ -1,0 +1,32 @@
+global
+    user haproxy
+    group haproxy
+    maxconn 20000
+    stats socket /run/haproxy/admin.sock mode 660 level admin
+
+defaults
+    mode tcp
+    timeout connect 10s
+    timeout client 1h
+    timeout server 1h
+
+frontend telegram
+    bind 0.0.0.0:{{ tg_port }}
+{% if tg_publish_ipv6 | default(false) %}
+    bind [::]:{{ tg_port }} v6only
+{% endif %}
+    tcp-request inspect-delay 3s
+    acl tls_hello req.ssl_hello_type 1
+    acl known_sni req.ssl_sni -i{% for route in tg_jump_tunnels if route.name != 'classic' %} {{ route.sni | default(tg_jump_domain) }}{% endfor %}
+
+    tcp-request content reject if tls_hello !known_sni
+    tcp-request content accept if tls_hello
+{% for route in tg_jump_tunnels if route.name != 'classic' %}
+    use_backend {{ route.name }} if { req.ssl_sni -i {{ route.sni | default(tg_jump_domain) }} }
+{% endfor %}
+    default_backend classic
+
+{% for item in tg_jump_tunnels %}
+backend {{ item.name }}
+    server proxy 127.0.0.1:{{ item.local_port }}
+{% endfor %}

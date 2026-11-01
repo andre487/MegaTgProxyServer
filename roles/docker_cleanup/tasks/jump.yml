@@ -1,0 +1,38 @@
+---
+- name: Require running jump router
+  ansible.builtin.service_facts:
+
+- name: Require HAProxy before retiring old proxy
+  ansible.builtin.assert:
+    that: ansible_facts.services['haproxy.service'].state == 'running'
+
+- name: Stop obsolete SOCKS egress
+  ansible.builtin.systemd_service:
+    name: mtg-ssh-egress
+    state: stopped
+    enabled: false
+  when: "'mtg-ssh-egress.service' in ansible_facts.services"
+
+- name: Inspect obsolete local proxy
+  community.docker.docker_container_info:
+    name: "{{ tg_container_name }}"
+  register: tg_cleanup_retired
+  no_log: true
+
+- name: Remove stopped obsolete local proxy
+  ansible.builtin.command:
+    argv: [docker, rm, "{{ tg_cleanup_retired.container.Id }}"]
+  when: tg_cleanup_retired.exists and not tg_cleanup_retired.container.State.Running
+
+- name: Inspect obsolete proxy network
+  community.docker.docker_network_info:
+    name: "{{ tg_network }}"
+  register: tg_obsolete_network
+  when: tg_network is defined
+
+- name: Remove only empty obsolete proxy network
+  community.docker.docker_network:
+    name: "{{ tg_network }}"
+    state: absent
+    force: false
+  when: tg_network is defined and tg_obsolete_network.exists and tg_obsolete_network.network.Containers | length == 0

@@ -1,0 +1,18 @@
+[Unit]
+Description=Telegram tunnel to {{ item.name }}
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+User=megatg-tunnel
+ExecStart=/usr/bin/ssh -NT -L 127.0.0.1:{{ item.local_port }}:127.0.0.1:{{ item.remote_port }} -p {{ item.ssh_port | default(22) }} -i /etc/megatg-jump/id_ed25519 -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=/etc/megatg-jump/known_hosts -o GlobalKnownHostsFile=/dev/null -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o ConnectTimeout=10 {{ item.user }}@{{ item.host }}
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

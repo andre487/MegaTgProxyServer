@@ -2,6 +2,7 @@
 - name: Configure Telegram proxy servers
   hosts: tg_proxies
   become: true
+  serial: 1
   pre_tasks:
     - name: Validate configuration before changing servers
       ansible.builtin.assert:
@@ -11,10 +12,10 @@
           - tg_secret is match('^[0-9a-fA-F]{32}$')
           - tg_mode in ['classic', 'faketls']
           - tg_engine != 'mtg' or tg_mode == 'faketls'
-          - tg_engine != 'mtproxy' or tg_mode == 'classic'
+          - tg_mode != 'faketls' or tg_domain is match('^[a-zA-Z0-9.-]+$')
           - tg_egress in ['direct', 'ssh']
-          - tg_egress != 'ssh' or tg_engine == 'mtg'
           - (tg_port | int) > 0 and (tg_port | int) < 65536
+      when: tg_node_role | default('proxy') == 'proxy'
       no_log: true
     - name: Require verified administrator connection
       ansible.builtin.assert:
@@ -24,4 +25,13 @@
     - common
     - admin
     - firewall
-    - proxy
+    - role: tunnel_users
+      tags: [tunnel_users]
+    - role: proxy
+      when: tg_node_role | default('proxy') == 'proxy'
+    - role: jump
+      when: tg_node_role | default('proxy') == 'jump'
+      tags: [jump]
+    - role: docker_cleanup
+      when: not ansible_check_mode
+      tags: [always, cleanup]

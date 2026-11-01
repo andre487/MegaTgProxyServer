@@ -1,0 +1,24 @@
+---
+- name: Bootstrap administrative access
+  hosts: all
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Validate supported operating system and phase
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution in ['Debian', 'Ubuntu']
+          - tg_bootstrap_phase in ['account', 'policy']
+          - tg_bootstrap_phase != 'policy' or ansible_user == tg_admin.user
+    - name: Install sudo for administrative account
+      ansible.builtin.apt:
+        name: sudo
+        state: present
+        update_cache: true
+      when: tg_bootstrap_phase == 'account'
+    - name: Set up administrative access
+      ansible.builtin.include_role:
+        name: admin
+        tasks_from: "{{ tg_bootstrap_phase }}"
+    - name: Apply administrative SSH policy now
+      ansible.builtin.meta: flush_handlers

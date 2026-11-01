@@ -1,0 +1,15 @@
+[Unit]
+Description=Official MTProxy TCP egress through SSH SOCKS5
+After=docker.service mtg-ssh-egress.service ufw.service
+Requires=docker.service
+Wants=mtg-ssh-egress.service
+
+[Service]
+ExecStartPre=/bin/sh -ec 'iptables -t nat -N MEGATG_EGRESS 2>/dev/null || true; iptables -t nat -F MEGATG_EGRESS; iptables -t nat -A MEGATG_EGRESS -i {{ tg_bridge }} -s {{ tg_subnet }} ! -d {{ tg_subnet }} -p tcp -j DNAT --to-destination {{ tg_gateway }}:{{ tg_redsocks_port }}; iptables -t nat -C PREROUTING -j MEGATG_EGRESS 2>/dev/null || iptables -t nat -I PREROUTING 1 -j MEGATG_EGRESS'
+ExecStart=/usr/sbin/redsocks -c /etc/megatg/redsocks.conf
+# Keep redirect on failure: a broken tunnel must not fall back to direct TCP.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -3,6 +3,8 @@ all:
     tg_proxies:
       vars:
         ansible_user: deploy
+        # Listed public addresses come first; unlisted links follow in unspecified order.
+        tg_links_order: [tg.example.com]
         tg_port: 443
         tg_unattended_upgrades: true
       hosts:
