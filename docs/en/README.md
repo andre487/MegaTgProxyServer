@@ -1,7 +1,7 @@
 # MegaTgProxyServer guide
 
 <p align="center">
-  <img src="../assets/mpx-icon.png" alt="MPX" width="96" height="96">
+  <img src="../assets/icon-radius.svg" width="160" alt="MPX — MegaTgProxyServer">
 </p>
 
 [Overview](../../README.md) · [Русский](../ru/README.md)
