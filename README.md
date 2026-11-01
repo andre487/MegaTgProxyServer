@@ -1,3 +1,5 @@
+<img src="docs/assets/mpx-icon.png" alt="MPX" width="96" height="96">
+
 # MegaTgProxyServer
 
 Manage Telegram proxies on Debian and Ubuntu with Ansible: MTG FakeTLS or official

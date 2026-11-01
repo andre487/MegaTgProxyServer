@@ -1,3 +1,5 @@
+<img src="../assets/mpx-icon.png" alt="MPX" width="96" height="96">
+
 # Руководство MegaTgProxyServer
 
 [Описание проекта](../../README.md) · [English](../en/README.md)
