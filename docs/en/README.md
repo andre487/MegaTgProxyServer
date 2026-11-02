@@ -8,7 +8,7 @@
 
 [Setup](#setup) · [Commands](#commands) · [Inventory](#inventory) ·
 [Secrets](#secrets) · [SSH egress](#ssh-egress) · [System](#system) ·
-[Hooks](#hooks) · [Operations](#operations) · [Troubleshooting](#troubleshooting)
+[Hooks](#hooks) · [Operations](#operations) · [Troubleshooting](#troubleshooting) · [Bootstrap and jump](#bootstrap-and-ingress-jump)
 
 ## Setup
 
@@ -73,6 +73,7 @@ that group's vars. Keep it outside the public repository. inventory-path, .hooks
 | Variable | Meaning / default |
 |---|---|
 | `ansible_host`, `ansible_user`, `ansible_port` | Management address, existing administrator, SSH port (22) |
+| `ansible_python_interpreter` | Remote Python path; examples pin `/usr/bin/python3` |
 | `ansible_ssh_private_key_file` | Optional local administrative private-key path |
 | `tg_admin.user`, `tg_admin.public_key` | Managed non-root administrator and public key |
 | `tg_endpoint` | Address published in client links; defaults to ansible_host |
@@ -82,7 +83,7 @@ that group's vars. Keep it outside the public repository. inventory-path, .hooks
 | `tg_secret` | Vault-encrypted 32-hex-character key; required |
 | `tg_domain` | FakeTLS SNI hostname; keep the existing value when importing MTG |
 | `tg_egress` | `direct` or `ssh` (both engines) |
-| `tg_image` | MTG defaults to nineseconds/mtg:2.2.8; official MTProxy to telegrammessenger/proxy:latest |
+| `tg_image` | MTG defaults to nineseconds/mtg:2.2.8; official MTProxy is built locally as `megatg/mtproxy:<commit>-minimal` |
 | `tg_container_name` | Set explicitly: mtg-proxy or mtproto-proxy; verify also uses it |
 | `tg_publish_ipv6` | Publish the proxy on IPv6 as well as IPv4; false by default |
 | `tg_mtg_template` | MTG template name: mtg.toml.j2 by default, or mtg-tuned.toml.j2 for the tuning profile |
@@ -197,7 +198,8 @@ One-off migration scripts/playbooks belong outside the production repository.
 Apply runs across hosts in parallel using the default Ansible strategy (up to 5 forks by default).
 Set `--forks N` (`-f N`) to control concurrency.
 Container recreation interrupts sessions. verify is a readiness check, not an MTProto
-session: test messages/media in Telegram from the affected network before proceeding.
+session: test messages/media in Telegram from the affected network after deployment.
+To update one host at a time, run separate applies with `--limit HOST`.
 A failed verification leaves changes applied. If recovery is needed, restore the prior
 inventory values and previous image/source revision, reapply, and verify. Images
 removed by cleanup must be pulled or built again. This does not undo

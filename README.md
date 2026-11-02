@@ -5,7 +5,8 @@
 </p>
 
 Manage Telegram proxies on Debian and Ubuntu with Ansible: MTG FakeTLS or official
-MTProxy (classic/FakeTLS), direct or SSH/SOCKS5 egress, and an SSH/SNI ingress jump. [MIT licensed](LICENSE).
+MTProxy (classic/FakeTLS), with optional SSH tunnels and SNI routing through a jump
+server. [MIT licensed](LICENSE).
 
 **[English guide](docs/en/README.md)** · **[Руководство на русском](docs/ru/README.md)**
 
@@ -16,11 +17,15 @@ and SSH access to each server. Use an existing non-root administrator with sudo,
 or create one with the two-phase `bootstrap` command described in the guides.
 
 Official MTProxy is built on each target from pinned official source, using a minimal
-`scratch` runtime. Choose an inventory example:
+`scratch` runtime. Both engines can connect to Telegram directly or through an
+SSH tunnel with a SOCKS5 listener. Separately, a jump server can route incoming
+connections to backends by FakeTLS SNI, with a default route for non-TLS traffic.
 
-- [MTG, direct](inventory.example.yml)
-- [MTG, SSH/SOCKS5 exit](inventory.ssh.example.yml)
-- [Official MTProxy, direct](inventory.mtproxy.example.yml)
+Start with an inventory example:
+
+- [MTG](inventory.example.yml)
+- [MTG with SSH egress](inventory.ssh.example.yml)
+- [Official MTProxy](inventory.mtproxy.example.yml)
 
 Follow the guide to create a private inventory and Vault password file, then run:
 
