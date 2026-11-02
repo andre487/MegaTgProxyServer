@@ -12,6 +12,17 @@ server. [MIT licensed](LICENSE).
 
 ## Start here
 
+On a Debian/Ubuntu control machine, install the CLI environment into `/opt/mega-tg-proxy-server`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andre487/MegaTgProxyServer/main/install.sh | sudo bash
+```
+
+The installer asks for confirmation through the terminal, installs dependencies, and prepares
+the CLI. Configure inventory and Vault separately; it does not provision servers.
+Reruns reuse the existing checkout without updating it. To select a branch or tag for
+a fresh installation, use `sudo env MEGATG_REF=TAG bash` in place of `sudo bash`.
+
 Requirements: macOS/Linux, Git, Python 3.12+, [uv](https://docs.astral.sh/uv/), OpenSSH,
 and SSH access to each server. Use an existing non-root administrator with sudo,
 or create one with the two-phase `bootstrap` command described in the guides.

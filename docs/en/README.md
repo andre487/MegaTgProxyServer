@@ -12,6 +12,17 @@
 
 ## Setup
 
+On a Debian/Ubuntu control machine, install the CLI environment into `/opt/mega-tg-proxy-server`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andre487/MegaTgProxyServer/main/install.sh | sudo bash
+```
+
+The installer asks for confirmation through the terminal, installs dependencies, and prepares
+the CLI. Configure inventory and Vault separately; it does not provision servers.
+Reruns reuse the existing checkout without updating it. To select a branch or tag for
+a fresh installation, use `sudo env MEGATG_REF=TAG bash` in place of `sudo bash`.
+
 Install Git, Python 3.12+, uv, and OpenSSH on macOS/Linux. Targets must run Debian/Ubuntu
 and already have a non-root account with public-key SSH and sudo. Set ansible_user and
 tg_admin.user to that account; use `bootstrap` below for initial root access. Use --ask-become-pass
@@ -320,3 +331,12 @@ Use `--tags cleanup` for cleanup only; check mode never removes resources.
 Set `tg_links_order` in `tg_proxies.vars` to a list of exact public domains/IPs
 in the desired order. It applies to `configs`, TXT, stdout and hook exports;
 `--limit` preserves relative ordering. Unlisted addresses follow in unspecified order.
+
+Deployment integration tests run in disposable LXD guests on GitHub Actions: Ubuntu 24.04
+and Debian 12, checkout and Bash installation, MTG and official MTProxy. They exercise
+bootstrap, apply/verify, plan, private link export, and a second deployment with cleanup.
+Run one case on a Linux host with initialized LXD:
+
+```sh
+tests/integration/deploy.sh ubuntu:24.04 bash mtg
+```
