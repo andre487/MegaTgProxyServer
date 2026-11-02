@@ -9,7 +9,7 @@ sed -i 's|http://|https://|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || t
 apt-get update
 apt-get install -y ca-certificates git python3 python3-venv openssh-server sudo
 mkdir /root/source
-tar -xzf /root/source.tar.gz -C /root/source
+tar --no-same-owner -xzf /root/source.tar.gz -C /root/source
 cd /root/source
 git init -b main
 git add .
