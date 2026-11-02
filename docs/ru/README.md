@@ -12,6 +12,17 @@
 
 ## Подготовка
 
+На управляющей Debian/Ubuntu можно установить окружение в `/opt/mega-tg-proxy-server`:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/andre487/MegaTgProxyServer/main/install.sh | sudo bash
+```
+
+Установщик запрашивает подтверждение через терминал, устанавливает зависимости и готовит CLI.
+Inventory и пароль Vault нужно настроить отдельно; серверы автоматически не настраиваются.
+Повторный запуск использует существующий checkout без обновления. Для выбора ветки или тега
+при первой установке задайте `MEGATG_REF` через `sudo env MEGATG_REF=TAG bash`.
+
 На управляющей macOS/Linux нужны Git, Python 3.12+, uv и OpenSSH. На Debian/Ubuntu
 нужен непривилегированный администратор с SSH-ключом и sudo.
 На новой ноде создайте его командой `bootstrap` (см. ниже).
@@ -326,3 +337,12 @@ Backend list и protocol key скачивает Ansible на хосте; startup
 точные публичные домены/IP из ссылок в нужном порядке. Этот порядок используется
 для `configs`, TXT, stdout и файла hook; `--limit` сохраняет относительный порядок.
 Адреса, которых нет в списке, выводятся после перечисленных в произвольном порядке.
+
+Интеграционные тесты развёртывания запускаются в одноразовых LXD-гостях в GitHub Actions:
+Ubuntu 24.04 и Debian 12, установка из checkout и через Bash, MTG и официальный MTProxy.
+Проверяются bootstrap, apply/verify, plan, приватный экспорт ссылок и повторная раскатка
+с очисткой. Запуск одного сценария на Linux с настроенным LXD:
+
+```sh
+tests/integration/deploy.sh ubuntu:24.04 bash mtg
+```
